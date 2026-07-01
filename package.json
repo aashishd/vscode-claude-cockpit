@@ -1,0 +1,81 @@
+{
+  "name": "claude-cockpit",
+  "displayName": "Claude Cockpit",
+  "description": "Launch Claude Code from VS Code, with traffic-light terminal tab titles and notifications when Claude needs you.",
+  "version": "0.1.0",
+  "publisher": "aashishd",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/aashishd/vscode-claude-cockpit"
+  },
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "keywords": [
+    "claude",
+    "claude-code",
+    "terminal",
+    "ai",
+    "agent"
+  ],
+  "main": "./extension.js",
+  "activationEvents": [
+    "onStartupFinished",
+    "onTerminalProfile:claude-cockpit.claude"
+  ],
+  "contributes": {
+    "terminal": {
+      "profiles": [
+        {
+          "id": "claude-cockpit.claude",
+          "title": "Claude Code",
+          "icon": "sparkle"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "claudeCockpit.launch",
+        "title": "Launch Claude Code (cc)",
+        "category": "Claude"
+      },
+      {
+        "command": "claudeCockpit.installHooks",
+        "title": "Install Claude Hooks (traffic lights + notifications)",
+        "category": "Claude Cockpit"
+      }
+    ],
+    "configuration": {
+      "title": "Claude Cockpit",
+      "properties": {
+        "claudeCockpit.command": {
+          "type": "string",
+          "default": "claude",
+          "description": "Command used to launch Claude Code."
+        },
+        "claudeCockpit.notifyOnBlocked": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show a notification when Claude is blocked waiting for your input."
+        },
+        "claudeCockpit.notifyOnDone": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show a notification when Claude finishes responding."
+        },
+        "claudeCockpit.statusBarButton": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show the \u2733 cc launch button in the status bar."
+        }
+      }
+    },
+    "configurationDefaults": {
+      "terminal.integrated.tabs.title": "${sequence}"
+    }
+  }
+}
