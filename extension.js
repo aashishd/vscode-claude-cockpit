@@ -1,11 +1,13 @@
 // Claude Cockpit — launch Claude Code terminals, traffic-light tab titles,
-// and notifications when Claude blocks or finishes.
+// and notifications + sounds when Claude blocks or finishes.
 //
 // The lights themselves are produced by Claude Code hooks (installed via the
 // "Install Claude Hooks" command): each hook emits a terminalSequence that
 // sets the tab title, and appends blocked/done events to a bridge file that
-// this extension watches to raise notifications.
+// this extension watches to raise notifications and play sounds.
 const vscode = require("vscode");
+const crypto = require("crypto");
+const { execFile } = require("child_process");
 const fs = require("fs");
 const os = require("os");
 const path = require("path");
@@ -27,8 +29,19 @@ const HOOK_EVENTS = {
   Stop: ["🟢", "done"],
 };
 
-/** Terminals created by this extension, used by the Focus button. */
-const ownTerminals = new Set();
+/**
+ * Cockpit terminals keyed by their CLAUDE_COCKPIT_TERM_ID, in creation order.
+ * The id is injected into the terminal env, inherited by claude and its hook
+ * processes, and echoed back in bridge events so the Focus button can target
+ * the exact terminal that raised the notification.
+ */
+const ownTerminals = new Map();
+
+function registerTerminal(terminal) {
+  const opts = terminal.creationOptions;
+  const id = opts && opts.env && opts.env.CLAUDE_COCKPIT_TERM_ID;
+  if (id) ownTerminals.set(id, terminal);
+}
 
 function config() {
   return vscode.workspace.getConfiguration("claudeCockpit");
@@ -49,23 +62,56 @@ function terminalOptions() {
     shellArgs: ["-l", "-i", "-c", stamp + cmd],
     iconPath: new vscode.ThemeIcon("sparkle"),
     color: new vscode.ThemeColor("terminal.ansiMagenta"),
+    env: { CLAUDE_COCKPIT_TERM_ID: crypto.randomUUID() },
   };
 }
 
 function launchClaude() {
-  const terminal = vscode.window.createTerminal(terminalOptions());
-  ownTerminals.add(terminal);
-  terminal.show();
+  vscode.window.createTerminal(terminalOptions()).show();
 }
 
-function focusClaudeTerminal() {
-  for (const t of [...ownTerminals].reverse()) {
+function focusClaudeTerminal(termId) {
+  const exact = termId && ownTerminals.get(termId);
+  if (exact && exact.exitStatus === undefined) {
+    exact.show();
+    return;
+  }
+  // Fallback for events without a term id (claude started outside Cockpit):
+  // most recently created live Cockpit terminal, then whatever has focus.
+  for (const t of [...ownTerminals.values()].reverse()) {
     if (t.exitStatus === undefined) {
       t.show();
       return;
     }
   }
   vscode.commands.executeCommand("workbench.action.terminal.focus");
+}
+
+// ---------------------------------------------------------------------------
+// Sounds: per-state audio cues played on bridge events.
+// ---------------------------------------------------------------------------
+
+const SOUND_SETTINGS = {
+  blocked: "soundBlocked",
+  done: "soundDone",
+};
+
+function playSound(state) {
+  const setting = SOUND_SETTINGS[state];
+  if (!setting) return;
+  if (!config().get("playSounds", true)) return;
+  const sound = config().get(setting, "");
+  if (!sound) return;
+  // Bare names resolve to macOS system sounds; anything with a slash is
+  // treated as an audio file path (required on Linux).
+  const file = sound.includes("/") ? sound : `/System/Library/Sounds/${sound}.aiff`;
+  if (process.platform === "darwin") {
+    execFile("afplay", [file], () => {});
+  } else {
+    execFile("paplay", [file], (err) => {
+      if (err) execFile("aplay", [file], () => {});
+    });
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -82,15 +128,16 @@ function eventBelongsToThisWindow(cwd) {
 
 function handleBridgeEvent(event) {
   if (!eventBelongsToThisWindow(event.cwd)) return;
+  playSound(event.state);
   const title = event.title || "claude";
   if (event.state === "blocked" && config().get("notifyOnBlocked", true)) {
     vscode.window
       .showWarningMessage(`🔴 Claude needs your input — ${title}`, "Focus terminal")
-      .then((choice) => choice && focusClaudeTerminal());
+      .then((choice) => choice && focusClaudeTerminal(event.term));
   } else if (event.state === "done" && config().get("notifyOnDone", true)) {
     vscode.window
       .showInformationMessage(`🟢 Claude finished — ${title}`, "Focus terminal")
-      .then((choice) => choice && focusClaudeTerminal());
+      .then((choice) => choice && focusClaudeTerminal(event.term));
   }
 }
 
@@ -213,9 +260,17 @@ function activate(context) {
     vscode.window.registerTerminalProfileProvider("claude-cockpit.claude", {
       provideTerminalProfile: () => new vscode.TerminalProfile(terminalOptions()),
     }),
-    vscode.window.onDidCloseTerminal((t) => ownTerminals.delete(t)),
+    vscode.window.onDidOpenTerminal(registerTerminal),
+    vscode.window.onDidCloseTerminal((t) => {
+      for (const [id, term] of ownTerminals) {
+        if (term === t) ownTerminals.delete(id);
+      }
+    }),
     startBridgeWatcher()
   );
+  // Pick up Cockpit terminals that already existed at activation
+  // (e.g. restored after a window reload).
+  vscode.window.terminals.forEach(registerTerminal);
 
   const statusItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 100);
   statusItem.text = "$(sparkle) cc";

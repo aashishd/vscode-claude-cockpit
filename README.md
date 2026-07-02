@@ -11,7 +11,8 @@ Claude needs you.
 | 🟢 | Claude finished responding |
 
 The tab title becomes `<light> ✳ <topic>`, where `<topic>` is the session
-title Claude generates (e.g. `🟢 ✳ Fix login race condition`).
+name when one exists (AI-generated or set via `/rename`), otherwise the
+session's first prompt, shortened (e.g. `🟢 ✳ Fix login race condition`).
 
 ## Features
 
@@ -21,8 +22,12 @@ title Claude generates (e.g. `🟢 ✳ Fix login race condition`).
 - **Traffic-light tab titles** — driven by Claude Code hooks emitting
   `terminalSequence` title updates, including the auto-generated topic name.
 - **Notifications** — a VS Code popup when Claude is blocked on your input
-  (🔴) and when it finishes (🟢), each with a *Focus terminal* button. Only
-  the window whose workspace contains the Claude session gets the popup.
+  (🔴) and when it finishes (🟢), each with a *Focus terminal* button that
+  jumps to the exact terminal that raised the event. Only the window whose
+  workspace contains the Claude session gets the popup.
+- **Sounds** — a distinct sound when Claude gets blocked and when it
+  finishes (macOS system sounds by default, configurable per state,
+  `claudeCockpit.playSounds: false` turns them all off).
 
 ## Requirements
 
@@ -60,6 +65,13 @@ Start a **new** Claude Code session afterwards — hooks load at session start.
 | `claudeCockpit.notifyOnBlocked` | `true` | Popup when Claude waits for input |
 | `claudeCockpit.notifyOnDone` | `true` | Popup when Claude finishes |
 | `claudeCockpit.statusBarButton` | `true` | Show the `✳ cc` status-bar button |
+| `claudeCockpit.playSounds` | `true` | Master switch for all sounds |
+| `claudeCockpit.soundBlocked` | `Basso` | Sound when Claude blocks on input |
+| `claudeCockpit.soundDone` | `Purr` | Sound when Claude finishes |
+
+Sound values are macOS system sound names (`/System/Library/Sounds`) or a
+path to an audio file (use a path on Linux, played via `paplay`/`aplay`).
+An empty value disables that sound.
 
 The extension also sets the default of `terminal.integrated.tabs.title` to
 `${sequence}` so program-set titles are shown; your own value wins if you have
@@ -70,12 +82,19 @@ one configured.
 Claude Code hooks (installed by the setup command) run on session lifecycle
 events. Each invocation of `~/.claude/hooks/cc-tab-title.sh`:
 
-1. reads the session topic from the transcript's `ai-title` records,
+1. resolves the topic: session name from `~/.claude/sessions/<pid>.json`
+   (matched by `session_id`, ignoring names merely derived from the
+   directory), else the newest `custom-title`/`ai-title` transcript record,
+   else the session's first user prompt shortened, else the cwd basename
+   (Claude Code ≥ ~2.1.198 generates AI titles only on demand, so the
+   first-prompt fallback is what most fresh sessions show),
 2. prints `{"terminalSequence": "<OSC 0 title>"}` which Claude Code emits to
    the terminal — VS Code renders it as the tab title via `${sequence}`,
 3. for blocked/done states, appends an event to
    `~/.claude/vscode-bridge/events.jsonl`, which the extension tails to raise
-   the popups.
+   popups and play sounds. Events carry the `CLAUDE_COCKPIT_TERM_ID` the
+   extension injected into the terminal's environment, so *Focus terminal*
+   targets the exact terminal.
 
 ## Uninstall
 

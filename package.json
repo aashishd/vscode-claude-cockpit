@@ -2,7 +2,7 @@
   "name": "claude-cockpit",
   "displayName": "Claude Cockpit",
   "description": "Launch Claude Code from VS Code, with traffic-light terminal tab titles and notifications when Claude needs you.",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "publisher": "aashishd",
   "license": "MIT",
   "repository": {
@@ -71,6 +71,21 @@
           "type": "boolean",
           "default": true,
           "description": "Show the \u2733 cc launch button in the status bar."
+        },
+        "claudeCockpit.playSounds": {
+          "type": "boolean",
+          "default": true,
+          "description": "Play sounds on Claude state changes (blocked/done)."
+        },
+        "claudeCockpit.soundBlocked": {
+          "type": "string",
+          "default": "Basso",
+          "description": "Sound when Claude is blocked waiting for your input: a macOS system sound name (from /System/Library/Sounds) or a path to an audio file (required on Linux). Empty disables."
+        },
+        "claudeCockpit.soundDone": {
+          "type": "string",
+          "default": "Purr",
+          "description": "Sound when Claude finishes responding: a macOS system sound name or a path to an audio file (required on Linux). Empty disables."
         }
       }
     },
